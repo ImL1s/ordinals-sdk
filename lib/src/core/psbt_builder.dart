@@ -90,10 +90,7 @@ class PSBTBuilder {
     final fee = estimatedSize * feeRate;
 
     // Create outputs
-    final changeAddr = P2wpkhAddress.fromAddress(
-      address: changeAddress,
-      network: network,
-    );
+    final changeAddr = _parseAddress(changeAddress, network);
     final changeAmount = totalInput - dustAmount - fee;
 
     final List<BitcoinOutput> outputs = [
@@ -178,10 +175,7 @@ class PSBTBuilder {
     }
 
     // Create receiver address
-    final receiverAddr = P2wpkhAddress.fromAddress(
-      address: receiverAddress,
-      network: network,
-    );
+    final receiverAddr = _parseAddress(receiverAddress, network);
 
     // Prepare UTXO from commit
     final utxos = [
