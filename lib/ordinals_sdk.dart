@@ -24,6 +24,7 @@ library ordinals_sdk;
 export 'src/core/models/inscription.dart';
 export 'src/core/models/utxo.dart';
 export 'src/core/psbt_builder.dart';
+export 'src/core/transaction_broadcaster.dart';
 
 // BRC-20 exports
 export 'src/brc20/brc20_service.dart';

@@ -1,5 +1,25 @@
 import 'dart:typed_data';
+import 'package:bitcoin_base/bitcoin_base.dart' as bb;
+import 'package:bitcoin_base/bitcoin_base.dart'
+    hide
+        UTXO; // Keep original for unaliased usage if needed but standardizing is better.
+// Actually, original code imported `package:bitcoin_base/bitcoin_base.dart' hide UTXO;`
+// I replaced usage with `bb.BitcoinUtxo` in the edits.
+// So I should just alias it. But `BitcoinNetwork` might still be used without alias in other parts.
+// Let's replace the import line to be safe.
+import 'package:bitcoin_base/bitcoin_base.dart' as bb;
+import 'package:bitcoin_base/bitcoin_base.dart'
+    hide
+        UTXO; // For backward compat with other methods if they use types directly?
+// No, creating ambiguity is bad.
+// I will just use `as bb` and `hide UTXO`.
+// Wait, `BitcoinNetwork.mainnet` was used unaliased in `network ??= BitcoinNetwork.mainnet;`.
+// So I should keep the unaliased import or update all usages.
+// Updating all usages is safer to avoid ambiguity.
+// But verifying existing code is large.
+// I'll keep `hide UTXO` imports and add `as bb`.
 import 'package:bitcoin_base/bitcoin_base.dart' hide UTXO;
+import 'package:bitcoin_base/bitcoin_base.dart' as bb;
 import 'models/utxo.dart';
 
 /// PSBT (Partially Signed Bitcoin Transaction) builder for Ordinals inscriptions
@@ -44,8 +64,10 @@ class PSBTBuilder {
     required String privateKeyWif,
     required int feeRate,
     BitcoinNetwork? network,
+    int? amount,
   }) {
     network ??= BitcoinNetwork.mainnet;
+    final outputAmount = amount ?? dustAmount;
 
     // Parse private key
     final privateKey = ECPrivate.fromWif(
@@ -71,13 +93,13 @@ class PSBTBuilder {
 
       bitcoinUtxos.add(
         UtxoWithAddress(
-          utxo: BitcoinUtxo(
+          utxo: bb.BitcoinUtxo(
             txHash: utxo.txid,
             value: BigInt.from(utxo.value),
             vout: utxo.vout,
             scriptType: utxoAddress.type,
           ),
-          ownerDetails: UtxoAddressDetails(
+          ownerDetails: bb.UtxoAddressDetails(
             publicKey: publicKey.toHex(),
             address: utxoAddress,
           ),
@@ -91,20 +113,21 @@ class PSBTBuilder {
 
     // Create outputs
     final changeAddr = _parseAddress(changeAddress, network);
-    final changeAmount = totalInput - dustAmount - fee;
+    final changeAmount = totalInput - outputAmount - fee;
 
-    final List<BitcoinOutput> outputs = [
-      BitcoinOutput(address: taprootAddress, value: BigInt.from(dustAmount)),
+    final List<bb.BitcoinOutput> outputs = [
+      bb.BitcoinOutput(
+          address: taprootAddress, value: BigInt.from(outputAmount)),
     ];
 
     if (changeAmount > dustAmount) {
       outputs.add(
-        BitcoinOutput(address: changeAddr, value: BigInt.from(changeAmount)),
+        bb.BitcoinOutput(address: changeAddr, value: BigInt.from(changeAmount)),
       );
     }
 
     // Build transaction
-    final builder = BitcoinTransactionBuilder(
+    final builder = bb.BitcoinTransactionBuilder(
       outPuts: outputs,
       fee: BigInt.from(fee),
       network: network,
@@ -146,8 +169,10 @@ class PSBTBuilder {
     required String privateKeyWif,
     required int feeRate,
     BitcoinNetwork? network,
+    int? inputAmount,
   }) {
     network ??= BitcoinNetwork.mainnet;
+    final amount = inputAmount ?? dustAmount;
 
     // Parse private key
     final privateKey = ECPrivate.fromWif(
@@ -169,8 +194,9 @@ class PSBTBuilder {
     final fee = estimatedSize * feeRate;
 
     // Calculate output
-    final outputAmount = dustAmount - fee;
-    if (outputAmount < dustAmount ~/ 2) {
+    final outputAmount = amount - fee;
+    if (outputAmount < dustAmount) {
+      // Removed '~/ 2' tolerance, strict rule
       throw Exception('Output amount too small after fees');
     }
 
@@ -180,9 +206,9 @@ class PSBTBuilder {
     // Prepare UTXO from commit
     final utxos = [
       UtxoWithAddress(
-        utxo: BitcoinUtxo(
+        utxo: bb.BitcoinUtxo(
           txHash: commitTxId,
-          value: BigInt.from(dustAmount),
+          value: BigInt.from(amount),
           vout: commitVout,
           scriptType: taprootAddress.type,
         ),
@@ -195,11 +221,11 @@ class PSBTBuilder {
 
     // Create output
     final outputs = [
-      BitcoinOutput(address: receiverAddr, value: BigInt.from(outputAmount)),
+      bb.BitcoinOutput(address: receiverAddr, value: BigInt.from(outputAmount)),
     ];
 
     // Build transaction
-    final builder = BitcoinTransactionBuilder(
+    final builder = bb.BitcoinTransactionBuilder(
       outPuts: outputs,
       fee: BigInt.from(fee),
       network: network,

@@ -1,35 +1,18 @@
 import 'package:dio/dio.dart';
 import 'package:decimal/decimal.dart';
+import 'package:bitcoin_base/bitcoin_base.dart' as bb;
 
 import '../utils/result.dart';
 import '../core/psbt_builder.dart';
 import '../core/models/utxo.dart';
+import '../core/transaction_broadcaster.dart';
 import 'brc20_models.dart';
 
 /// BRC-20 token service for interacting with the BRC-20 protocol
-///
-/// This service provides methods for:
-/// - Deploying new BRC-20 tokens
-/// - Minting existing tokens
-/// - Creating transfer inscriptions
-/// - Querying token information and balances
-///
-/// ## Example
-///
-/// ```dart
-/// final brc20 = BRC20Service(apiKey: 'your-api-key');
-///
-/// // Get token info
-/// final token = await brc20.getToken('ordi');
-/// print('Minted: ${token.mintedSupply}/${token.maxSupply}');
-///
-/// // Get balance
-/// final balance = await brc20.getBalance('bc1q...', 'ordi');
-/// print('Available: ${balance.availableBalance}');
-/// ```
 class BRC20Service {
   final Dio _dio;
   final String? _apiKey;
+  final TransactionBroadcaster _broadcaster;
 
   /// Base URL for the Ordinals API
   String baseUrl;
@@ -42,12 +25,19 @@ class BRC20Service {
     String? baseUrl,
     this.isTestnet = false,
     Dio? dio,
+    TransactionBroadcaster? broadcaster,
   })  : _apiKey = apiKey,
         baseUrl = baseUrl ??
             (isTestnet
                 ? 'https://api.hiro.so/ordinals/v1'
                 : 'https://api.hiro.so/ordinals/v1'),
-        _dio = dio ?? Dio() {
+        _dio = dio ?? Dio(),
+        _broadcaster = broadcaster ??
+            MempoolTransactionBroadcaster(
+              baseUrl: isTestnet
+                  ? 'https://mempool.space/testnet/api'
+                  : 'https://mempool.space/api',
+            ) {
     _setupDio();
   }
 
@@ -60,15 +50,6 @@ class BRC20Service {
   }
 
   /// Deploy a new BRC-20 token
-  ///
-  /// Creates and broadcasts the inscription transaction for a new token.
-  ///
-  /// - [params]: Deploy parameters (tick, maxSupply, limitPerMint)
-  /// - [privateKeyWif]: Private key in WIF format
-  /// - [address]: Sender address
-  /// - [utxos]: Available UTXOs for funding
-  /// - [feeRate]: Fee rate in sat/vB
-  /// - [receiverAddress]: Optional receiver address for the inscription
   Future<Result<String>> deployToken({
     required BRC20DeployParams params,
     required String privateKeyWif,
@@ -78,39 +59,25 @@ class BRC20Service {
     String? receiverAddress,
   }) async {
     try {
-      // Check if token already exists
       final existingToken = await getToken(params.tick);
       if (existingToken.isSuccess) {
         return Result.failure('Token ${params.tick} already exists');
       }
 
-      // Create inscription script
-      final inscriptionScript = PSBTBuilder.createJsonInscriptionScript(
-        params.toInscriptionJson(),
-      );
-
-      // Build commit transaction
-      final parsedUtxos = utxos.map((u) => _parseUtxo(u)).toList();
-
-      final commitTx = PSBTBuilder.buildCommitTransaction(
-        utxos: parsedUtxos,
-        inscriptionScript: inscriptionScript,
-        changeAddress: address,
+      return _broadcastAndReveal(
+        inscriptionJson: params.toInscriptionJson(),
         privateKeyWif: privateKeyWif,
+        address: address,
+        utxos: utxos,
         feeRate: feeRate,
+        receiverAddress: receiverAddress ?? address,
       );
-
-      // TODO: Broadcast commit transaction and build reveal
-      // For now, return the commit transaction hex
-      return Result.success(commitTx);
     } catch (e) {
       return Result.failure('Failed to deploy token: $e');
     }
   }
 
   /// Mint BRC-20 tokens
-  ///
-  /// Creates a mint inscription for an existing token.
   Future<Result<String>> mintToken({
     required BRC20MintParams params,
     required String privateKeyWif,
@@ -120,7 +87,6 @@ class BRC20Service {
     String? receiverAddress,
   }) async {
     try {
-      // Verify token exists and has remaining supply
       final tokenResult = await getToken(params.tick);
       if (tokenResult.isFailure) {
         return Result.failure('Token ${params.tick} not found');
@@ -137,32 +103,20 @@ class BRC20Service {
         );
       }
 
-      // Create inscription script
-      final inscriptionScript = PSBTBuilder.createJsonInscriptionScript(
-        params.toInscriptionJson(),
-      );
-
-      // Build commit transaction
-      final parsedUtxos = utxos.map((u) => _parseUtxo(u)).toList();
-
-      final commitTx = PSBTBuilder.buildCommitTransaction(
-        utxos: parsedUtxos,
-        inscriptionScript: inscriptionScript,
-        changeAddress: address,
+      return _broadcastAndReveal(
+        inscriptionJson: params.toInscriptionJson(),
         privateKeyWif: privateKeyWif,
+        address: address,
+        utxos: utxos,
         feeRate: feeRate,
+        receiverAddress: receiverAddress ?? address,
       );
-
-      return Result.success(commitTx);
     } catch (e) {
       return Result.failure('Failed to mint token: $e');
     }
   }
 
   /// Create a BRC-20 transfer inscription
-  ///
-  /// This is the first step of a BRC-20 transfer. After creating the transfer
-  /// inscription, you need to send it to the recipient.
   Future<Result<String>> createTransferInscription({
     required BRC20TransferParams params,
     required String privateKeyWif,
@@ -171,7 +125,6 @@ class BRC20Service {
     required int feeRate,
   }) async {
     try {
-      // Verify balance
       final balanceResult = await getBalance(address, params.tick);
       if (balanceResult.isFailure) {
         return Result.failure('Failed to check balance');
@@ -184,25 +137,87 @@ class BRC20Service {
         );
       }
 
-      // Create inscription script
+      return _broadcastAndReveal(
+        inscriptionJson: params.toInscriptionJson(),
+        privateKeyWif: privateKeyWif,
+        address: address,
+        utxos: utxos,
+        feeRate: feeRate,
+        receiverAddress: address,
+      );
+    } catch (e) {
+      return Result.failure('Failed to create transfer inscription: $e');
+    }
+  }
+
+  /// Helper to handle the Commit-Reveal flow
+  Future<Result<String>> _broadcastAndReveal({
+    required Map<String, dynamic> inscriptionJson,
+    required String privateKeyWif,
+    required String address,
+    required List<Map<String, dynamic>> utxos,
+    required int feeRate,
+    required String receiverAddress,
+  }) async {
+    try {
+      final network =
+          isTestnet ? bb.BitcoinNetwork.testnet : bb.BitcoinNetwork.mainnet;
+
+      // 1. Create inscription script
       final inscriptionScript = PSBTBuilder.createJsonInscriptionScript(
-        params.toInscriptionJson(),
+        inscriptionJson,
       );
 
-      // Build commit transaction
+      // Estimate reveal transaction fee to determine commit amount
+      // Estimate size: ~ 100 + scriptSize + 43 + scriptSize/4
+      // We can use PSBTBuilder._estimateRevealSize but it's private.
+      // But we can approximate or expose it?
+      // Better to compute it here or add a public estimator to PSBTBuilder.
+      // For now, let's implement the estimation here, mirroring PSBTBuilder.
+
+      final scriptSize = inscriptionScript.length;
+      final revealSize = 100 + scriptSize + 43 + (scriptSize / 4).ceil();
+      final revealFee = revealSize * feeRate;
+      final dustAmount = 546;
+
+      // Amount needed in commit output = reveal fee + dust (for reveal output)
+      final commitAmount = revealFee + dustAmount;
+
+      // 2. Parse UTXOs
       final parsedUtxos = utxos.map((u) => _parseUtxo(u)).toList();
 
-      final commitTx = PSBTBuilder.buildCommitTransaction(
+      // 3. Build commit transaction
+      final commitTxHex = PSBTBuilder.buildCommitTransaction(
         utxos: parsedUtxos,
         inscriptionScript: inscriptionScript,
         changeAddress: address,
         privateKeyWif: privateKeyWif,
         feeRate: feeRate,
+        network: network,
+        amount: commitAmount,
       );
 
-      return Result.success(commitTx);
+      // 4. Broadcast commit transaction
+      final commitTxId = await _broadcaster.broadcast(commitTxHex);
+
+      // 5. Build reveal transaction
+      final revealTxHex = PSBTBuilder.buildRevealTransaction(
+        commitTxId: commitTxId,
+        commitVout: 0,
+        inscriptionScript: inscriptionScript,
+        receiverAddress: receiverAddress,
+        privateKeyWif: privateKeyWif,
+        feeRate: feeRate,
+        network: network,
+        inputAmount: commitAmount,
+      );
+
+      // 6. Broadcast reveal transaction
+      final revealTxId = await _broadcaster.broadcast(revealTxHex);
+
+      return Result.success(revealTxId);
     } catch (e) {
-      return Result.failure('Failed to create transfer inscription: $e');
+      return Result.failure('Broadcast failed: $e');
     }
   }
 
