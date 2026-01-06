@@ -1,9 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:decimal/decimal.dart';
-import 'package:bitcoin_base/bitcoin_base.dart' as bb;
+import 'package:web3_universal_bitcoin/web3_universal_bitcoin.dart' as web3;
+import 'package:web3_universal_bitcoin/web3_universal_bitcoin.dart'
+    as bb; // Keep bb for bitcoin_base types if needed
 
 import '../utils/result.dart';
-import '../core/psbt_builder.dart';
 import '../core/models/utxo.dart';
 import '../core/transaction_broadcaster.dart';
 import 'brc20_models.dart';
@@ -54,7 +55,7 @@ class BRC20Service {
     required BRC20DeployParams params,
     required String privateKeyWif,
     required String address,
-    required List<Map<String, dynamic>> utxos,
+    required List<UTXO> utxos,
     required int feeRate,
     String? receiverAddress,
   }) async {
@@ -82,7 +83,7 @@ class BRC20Service {
     required BRC20MintParams params,
     required String privateKeyWif,
     required String address,
-    required List<Map<String, dynamic>> utxos,
+    required List<UTXO> utxos,
     required int feeRate,
     String? receiverAddress,
   }) async {
@@ -121,7 +122,7 @@ class BRC20Service {
     required BRC20TransferParams params,
     required String privateKeyWif,
     required String address,
-    required List<Map<String, dynamic>> utxos,
+    required List<UTXO> utxos,
     required int feeRate,
   }) async {
     try {
@@ -155,7 +156,7 @@ class BRC20Service {
     required Map<String, dynamic> inscriptionJson,
     required String privateKeyWif,
     required String address,
-    required List<Map<String, dynamic>> utxos,
+    required List<UTXO> utxos,
     required int feeRate,
     required String receiverAddress,
   }) async {
@@ -164,16 +165,17 @@ class BRC20Service {
           isTestnet ? bb.BitcoinNetwork.testnet : bb.BitcoinNetwork.mainnet;
 
       // 1. Create inscription script
-      final inscriptionScript = PSBTBuilder.createJsonInscriptionScript(
+      final inscriptionScript =
+          web3.OrdinalPsbtBuilder.createJsonInscriptionScript(
         inscriptionJson,
       );
 
       // Estimate reveal transaction fee to determine commit amount
       // Estimate size: ~ 100 + scriptSize + 43 + scriptSize/4
-      // We can use PSBTBuilder._estimateRevealSize but it's private.
+      // We can use web3.PsbtBuilder._estimateRevealSize but it's private.
       // But we can approximate or expose it?
-      // Better to compute it here or add a public estimator to PSBTBuilder.
-      // For now, let's implement the estimation here, mirroring PSBTBuilder.
+      // Better to compute it here or add a public estimator to PsbtBuilder.
+      // For now, let's implement the estimation here, mirroring PsbtBuilder.
 
       final scriptSize = inscriptionScript.length;
       final revealSize = 100 + scriptSize + 43 + (scriptSize / 4).ceil();
@@ -184,11 +186,12 @@ class BRC20Service {
       final commitAmount = revealFee + dustAmount;
 
       // 2. Parse UTXOs
-      final parsedUtxos = utxos.map((u) => _parseUtxo(u)).toList();
+      // UTXO already extends web3.OrdinalUtxo, so we can pass it directly
+      // But we need to ensure the list is cast correctly if needed, or OrdinalPsbtBuilder accepts generic List<OrdinalUtxo>
 
       // 3. Build commit transaction
-      final commitTxHex = PSBTBuilder.buildCommitTransaction(
-        utxos: parsedUtxos,
+      final commitTxHex = web3.OrdinalPsbtBuilder.buildCommitTransaction(
+        utxos: utxos,
         inscriptionScript: inscriptionScript,
         changeAddress: address,
         privateKeyWif: privateKeyWif,
@@ -201,7 +204,7 @@ class BRC20Service {
       final commitTxId = await _broadcaster.broadcast(commitTxHex);
 
       // 5. Build reveal transaction
-      final revealTxHex = PSBTBuilder.buildRevealTransaction(
+      final revealTxHex = web3.OrdinalPsbtBuilder.buildRevealTransaction(
         commitTxId: commitTxId,
         commitVout: 0,
         inscriptionScript: inscriptionScript,
@@ -354,16 +357,5 @@ class BRC20Service {
     } catch (e) {
       return Result.failure('Failed to get activity: $e');
     }
-  }
-
-  // Private helpers
-
-  UTXO _parseUtxo(Map<String, dynamic> json) {
-    return UTXO(
-      txid: json['txid'] as String,
-      vout: json['vout'] as int,
-      value: json['value'] as int,
-      address: json['address'] as String?,
-    );
   }
 }

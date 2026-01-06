@@ -34,7 +34,7 @@ packages:
     source: hosted
     version: "2.13.0"
   bitcoin_base:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: bitcoin_base
       sha256: abc80891f654cc09c246d09eb9ad4331e061f8f9c796eab367545a8f61da909f
@@ -154,7 +154,7 @@ packages:
     source: hosted
     version: "1.15.0"
   crypto:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: crypto
       sha256: c8ea0233063ba03258fbcf2ca4d6dadfefe14f02fab57702265467a19f27fadf
@@ -257,6 +257,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.5"
+  js:
+    dependency: transitive
+    description:
+      name: js
+      sha256: "53385261521cc4a0c4658fd0ad07a7d14591cf8fc33abbceae306ddb974888dc"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.7.2"
   json_annotation:
     dependency: transitive
     description:
@@ -329,6 +337,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.9.1"
+  pointycastle:
+    dependency: transitive
+    description:
+      name: pointycastle
+      sha256: "4be0097fcf3fd3e8449e53730c631200ebc7b88016acecab2b0da2f0149222fe"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.9.1"
   pool:
     dependency: transitive
     description:
@@ -521,6 +537,41 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.1"
+  web3_universal_abi:
+    dependency: transitive
+    description:
+      path: "../dart_web3/dart_web3/packages/abi"
+      relative: true
+    source: path
+    version: "0.1.1"
+  web3_universal_bitcoin:
+    dependency: "direct main"
+    description:
+      path: "../dart_web3/dart_web3/packages/extensions/bitcoin"
+      relative: true
+    source: path
+    version: "0.1.1"
+  web3_universal_core:
+    dependency: "direct main"
+    description:
+      path: "../dart_web3/dart_web3/packages/core"
+      relative: true
+    source: path
+    version: "0.1.1"
+  web3_universal_crypto:
+    dependency: "direct main"
+    description:
+      path: "../dart_web3/dart_web3/packages/crypto"
+      relative: true
+    source: path
+    version: "0.2.0"
+  web3_universal_signer:
+    dependency: transitive
+    description:
+      path: "../dart_web3/dart_web3/packages/signer"
+      relative: true
+    source: path
+    version: "0.1.1"
   web_socket:
     dependency: transitive
     description:

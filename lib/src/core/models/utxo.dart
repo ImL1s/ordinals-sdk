@@ -1,34 +1,18 @@
+import 'package:web3_universal_bitcoin/web3_universal_bitcoin.dart';
+
 /// UTXO (Unspent Transaction Output) model
-class UTXO {
-  /// Transaction ID
-  final String txid;
-
-  /// Output index
-  final int vout;
-
-  /// Value in satoshis
-  final int value;
-
-  /// Whether this is a SegWit output
-  final bool isSegwit;
-
-  /// Address associated with this UTXO
-  final String? address;
-
+class UTXO extends OrdinalUtxo {
   /// Transaction status
   final Map<String, dynamic>? status;
 
-  /// Script pubkey (optional)
-  final String? scriptPubKey;
-
   UTXO({
-    required this.txid,
-    required this.vout,
-    required this.value,
-    this.isSegwit = false,
-    this.address,
+    required super.txid,
+    required super.vout,
+    required super.value,
+    super.isSegwit = false,
+    super.address,
     this.status,
-    this.scriptPubKey,
+    super.scriptPubKey,
   });
 
   /// Create from JSON
@@ -45,18 +29,11 @@ class UTXO {
   }
 
   /// Convert to JSON
+  @override
   Map<String, dynamic> toJson() => {
-    'txid': txid,
-    'vout': vout,
-    'value': value,
-    'isSegwit': isSegwit,
-    if (address != null) 'address': address,
-    if (status != null) 'status': status,
-    if (scriptPubKey != null) 'scriptPubKey': scriptPubKey,
-  };
-
-  /// Get the outpoint string (txid:vout)
-  String get outpoint => '$txid:$vout';
+        ...super.toJson(),
+        if (status != null) 'status': status,
+      };
 
   /// Whether this UTXO is confirmed
   bool get isConfirmed => status?['confirmed'] == true;

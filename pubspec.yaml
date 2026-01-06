@@ -1,6 +1,7 @@
 name: ordinals_sdk
 description: A comprehensive Dart SDK for Bitcoin Ordinals, BRC-20 tokens, and inscription management. Supports Taproot inscriptions, PSBT building, and marketplace integration.
 version: 1.0.0
+publish_to: 'none'
 homepage: https://github.com/ImL1s/ordinals-sdk
 repository: https://github.com/ImL1s/ordinals-sdk
 issue_tracker: https://github.com/ImL1s/ordinals-sdk/issues
@@ -9,12 +10,16 @@ environment:
   sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
-  bitcoin_base: ^6.0.0
   dio: ^5.3.4
   decimal: ^2.3.3
   collection: ^1.18.0
   meta: ^1.9.1
-  crypto: ^3.0.3
+  web3_universal_bitcoin:
+    path: ../dart_web3/dart_web3/packages/extensions/bitcoin
+  web3_universal_crypto:
+    path: ../dart_web3/dart_web3/packages/crypto
+  web3_universal_core:
+    path: ../dart_web3/dart_web3/packages/core
 
 dev_dependencies:
   test: ^1.24.9
