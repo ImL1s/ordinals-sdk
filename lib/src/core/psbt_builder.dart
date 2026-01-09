@@ -1,6 +1,6 @@
 import 'dart:typed_data';
-import 'package:web3_universal_bitcoin/web3_universal_bitcoin.dart';
-// Ensure we don't hide explicit imports needed for wrapper if necessary, but PsbtBuilder is in namespace
+import 'package:web3_universal_bitcoin/web3_universal_bitcoin.dart' hide UTXO;
+import 'models/utxo.dart';
 
 /// PSBT (Partially Signed Bitcoin Transaction) builder for Ordinals inscriptions
 /// Wrapper around [OrdinalPsbtBuilder] from `web3_universal_bitcoin`.
@@ -13,7 +13,7 @@ class PSBTBuilder {
 
   /// Build a Commit transaction for inscription
   static String buildCommitTransaction({
-    required List<OrdinalUtxo> utxos,
+    required List<UTXO> utxos,
     required Uint8List inscriptionScript,
     required String changeAddress,
     required String privateKeyWif,
